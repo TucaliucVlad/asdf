@@ -7,11 +7,12 @@ from workflows.loader import WorkflowLoader
 class StageRouter:
     """Central router that applies protection levels (L1/L2) between stages — exactly per Correction Pack."""
     
-    def __init__(self, project_id: str):
+    def __init__(self, project_id: str, mode: str = "playground"):
         self.project_id = project_id
-        self.state_machine = StateMachine(project_id)
+        self.mode = mode
+        self.state_machine = StateMachine(project_id, mode)
         self.loader = WorkflowLoader()
-        self.project_root = Path(f"projects/{project_id}")
+        self.project_root = Path(f"projects/{mode}/{project_id}")
         self.project_root.mkdir(parents=True, exist_ok=True)
     
     def process_stage(self, stage_name: str, agent_output: Dict[str, Any]) -> ProjectState:
@@ -25,7 +26,7 @@ class StageRouter:
                 next_state_name = stage.get("next_state", "REVIEW_BATCH")
                 next_state = ProjectState[next_state_name]
                 
-                # Apply L1/L2 protection for implementation stage
+                # Apply L1 protection (L2 is handled in orchestrator for tests)
                 if stage.get("protection") == "L1_L2":
                     try:
                         validated = retry_policy.l1_validate_and_retry(
@@ -34,7 +35,7 @@ class StageRouter:
                         self.state_machine.transition(ProjectState.MATERIALIZE_FILES, batch_id, task_ids)
                         return ProjectState.MATERIALIZE_FILES
                     except Exception as e:
-                        if "L1 exhausted" in str(e):
+                        if "exhausted" in str(e).lower():
                             return self.state_machine.handle_l1_failure(3, batch_id, task_ids)
                         raise
                 

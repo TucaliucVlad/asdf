@@ -1,4 +1,10 @@
 # DYNAMIC USER SEED — EDIT THIS FOR EVERY NEW PROJECT
 # (this is the only file you will change per project)
 
-Create a small app with a gui, that can make a plot of a parabola. It should have 3 edit fields for a,b anc c values. The axes must have a grid, and a xy axis system.
+Create a small app with a gui, that can make a plot of a parabola.
+It should have 3 edit fields for a,b anc c values. The axes must have a grid, 
+and a xy axis system. everything on the same gui, not multiple windows. I must also
+have a button which appends different plots and updates the legend, or a button which
+makes a single plot. I also want the possibility to fix a point with the mouse on the 
+parabola. In that point I want the tangent to appear plotted. No legend for the tangent. 
+It must be maximum one tangent per parabola.

@@ -68,6 +68,11 @@ class StateMachine:
             self._save_state(ProjectState.RUN_TESTS, {"batch_id": batch_id, "task_ids": task_ids})
             return ProjectState.RUN_TESTS
         
+        # === ADDED: Strict deterministic enforcement for orchestrator L2 exhaustion + COMPLETE (Correction Pack) ===
+        if next_state in (ProjectState.COMPLETE, ProjectState.FAILED_L2_EXHAUSTED, ProjectState.FAILED_L1_EXHAUSTED):
+            self._save_state(next_state, metadata)
+            return next_state
+        
         self._save_state(next_state, metadata)
         return next_state
     
