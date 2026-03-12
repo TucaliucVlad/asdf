@@ -1,0 +1,16 @@
+name: default_protected_pipeline
+description: Master Plan compliant pipeline with L1/L2 protection hooks
+stages:
+  - name: requirements_formalized
+    agent: requirements_engineer
+    next_state: PLANNED
+  - name: planning
+    agent: planner
+    next_state: L1_VALIDATE
+  - name: implementation
+    agent: implementer
+    protection: L1_L2
+    next_state: MATERIALIZE_FILES
+  - name: review
+    agent: documentation
+    next_state: COMPLETE

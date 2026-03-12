@@ -1,0 +1,12 @@
+{
+  "state": "L1_VALIDATE",
+  "project_id": "test-project-123",
+  "timestamp": "2026-03-12T11:48:27.181438",
+  "metadata": {
+    "batch_id": "impl-batch-1",
+    "task_ids": [
+      "task-1",
+      "task-2"
+    ]
+  }
+}

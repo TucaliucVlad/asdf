@@ -1,3 +1,4 @@
 python-dotenv
 jsonschema>=4.23.0
 pytest>=8.3.0
+pyyaml>=6.0.2
