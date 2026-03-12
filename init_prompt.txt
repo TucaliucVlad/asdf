@@ -1,4 +1,4 @@
 # DYNAMIC USER SEED — EDIT THIS FOR EVERY NEW PROJECT
 # (this is the only file you will change per project)
 
-Build a simple hello-world CLI tool that prints "Hello from protected pipeline!" and has one unit test.
+Create a small app with a gui, that can make a plot of a parabola. It should have 3 edit fields for a,b anc c values. The axes must have a grid, and a xy axis system.
