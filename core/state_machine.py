@@ -30,12 +30,14 @@ class ProjectState(Enum):
     FAILED = auto()  # terminal failure state
 
 class StateMachine:
-    """Deterministic state transitions with retry awareness."""
+    """Deterministic state transitions with retry awareness + playground/shared support."""
     
-    def __init__(self, project_id: str):
+    def __init__(self, project_id: str, mode: str = "playground"):
         self.project_id = project_id
-        self.state_file = Path(f"projects/{project_id}/state.json")
-        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        self.mode = mode
+        self.project_root = Path(f"projects/{mode}/{project_id}")
+        self.state_file = self.project_root / "state.json"
+        self.project_root.mkdir(parents=True, exist_ok=True)
         self.current_state = self._load_state()
     
     def _load_state(self) -> ProjectState:
@@ -58,16 +60,14 @@ class StateMachine:
         """Enforces valid transitions + auto-routes through protection levels."""
         task_ids = task_ids or []
         
-        # Auto-insert protection states when needed
         if next_state in (ProjectState.MATERIALIZE_FILES, ProjectState.REVIEW_BATCH):
             self._save_state(ProjectState.L1_VALIDATE, {"batch_id": batch_id, "task_ids": task_ids})
-            return ProjectState.L1_VALIDATE  # L1 always runs first
+            return ProjectState.L1_VALIDATE
         
         if next_state == ProjectState.RUN_TESTS:
             self._save_state(ProjectState.RUN_TESTS, {"batch_id": batch_id, "task_ids": task_ids})
             return ProjectState.RUN_TESTS
         
-        # Record the final transition
         self._save_state(next_state, metadata)
         return next_state
     
@@ -99,3 +99,8 @@ class StateMachine:
     
     def is_terminal(self) -> bool:
         return self.current_state in (ProjectState.COMPLETE, ProjectState.FAILED, ProjectState.FAILED_L1_EXHAUSTED, ProjectState.FAILED_L2_EXHAUSTED)
+
+    @classmethod
+    def exists(cls, project_id: str, mode: str = "playground"):
+        """Used by status/list — NEVER creates any folder or file."""
+        return (Path(f"projects/{mode}/{project_id}/state.json")).exists()

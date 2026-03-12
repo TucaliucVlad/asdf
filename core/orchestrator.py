@@ -9,10 +9,10 @@ from agents.tester import run as test_run
 class Orchestrator:
     """Full end-to-end protected pipeline (init → L1 → L2 → complete)."""
     
-    def __init__(self, project_id: str):
+    def __init__(self, project_id: str, mode: str = "playground"):
         self.project_id = project_id
         self.router = StageRouter(project_id)
-        self.state_machine = StateMachine(project_id)
+        self.state_machine = StateMachine(project_id, mode)
     
     def run_full_pipeline(self):
         seed_path = Path("init_prompt.txt")

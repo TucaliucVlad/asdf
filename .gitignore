@@ -1,5 +1,11 @@
-venv/
-__pycache__/
+# Playground projects — never on git
+projects/playground/
+
+# Temp
+test_phase*.py
 *.pyc
+__pycache__/
+.pytest_cache/
+venv/
 .env
 .vs/
