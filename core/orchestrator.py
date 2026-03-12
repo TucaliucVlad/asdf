@@ -14,10 +14,13 @@ class Orchestrator:
         self.router = StageRouter(project_id)
         self.state_machine = StateMachine(project_id)
     
-    def run_full_pipeline(self, user_prompt: str = "Build a simple demo project"):
-        print(f"🚀 Starting protected pipeline for: {self.project_id}")
+    def run_full_pipeline(self):
+        seed_path = Path("init_prompt.txt")
+        user_prompt = seed_path.read_text(encoding="utf-8").strip() if seed_path.exists() else "Build a simple demo project"
+        print(f"🚀 Starting protected pipeline with seed from init_prompt.txt")
+        print(f"Seed preview: {user_prompt[:120]}...")
         
-        # 1. Requirements (scaffolding schema)
+        # 1. Requirements
         req = req_run(self.project_id, user_prompt)
         print("✅ Requirements formalized")
         
@@ -25,7 +28,7 @@ class Orchestrator:
         plan = plan_run(self.project_id, req)
         print("✅ Planning completed")
         
-        # 3. Implementation (L1 + L2 protection enforced by router)
+        # 3. Implementation + L1/L2 protection
         impl = impl_run(self.project_id, plan)
         print("✅ Implementation + L1/L2 protection completed")
         
