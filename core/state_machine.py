@@ -1,24 +1,39 @@
 # core/state_machine.py
-# Version: 2.1 - FINAL Phase 2 - clean stub messages + better execution feedback
+# Version: 5.2 - Implementation Agent integrated (runs on IMPLEMENTED for current projects)
 
-from core.models import Project, ProjectState, CostEstimate
-from tools.token_counter import count_tokens, estimate_cost
+import json
+from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
 
+from core.models import Project, ProjectState, CostEstimate
+from tools.token_counter import count_tokens, estimate_cost
+from tools.project_manager import save_project_state
+
 console = Console()
 
 class StateMachine:
-    def __init__(self, project: Project):
+    def __init__(self, project: Project, folder: Path):
         self.project = project
-        self.current_state = ProjectState.IDLE
+        self.folder = folder
+        self.current_state = ProjectState.CREATED
         self.history: list[str] = []
 
-    def transition_to(self, new_state: ProjectState):
-        console.print(f"[blue]→ {self.current_state.name} → {new_state.name}[/]")
-        self.current_state = new_state
-        self.history.append(f"Entered {new_state.name}")
+        state_file = folder / "state.json"
+        if state_file.exists():
+            data = json.loads(state_file.read_text())
+            old_state = data["current_state"]
+            mapping = {
+                "IDLE": "CREATED",
+                "ANALYZE": "REQUIREMENTS_FORMALIZED",
+                "REQUIREMENTS": "REQUIREMENTS_FORMALIZED",
+                "CLARIFY": "REQUIREMENTS_FORMALIZED",
+                "PLANNING": "PLANNED",
+                "IMPLEMENTING": "IMPLEMENTED",   # backward compat for your project2
+            }
+            self.current_state = ProjectState(mapping.get(old_state, old_state))
+            self.history = data.get("history", [])
 
     def preview_next_chunk(self) -> CostEstimate:
         messages = [
@@ -33,33 +48,48 @@ class StateMachine:
             input_tokens=input_tokens,
             estimated_output_tokens=est_output,
             estimated_cost_usd=cost_usd,
-            model_used="groq/grok-beta"
+            model_used="xai/grok-3-mini-beta"
         )
 
     def advance(self) -> bool:
         if self.current_state == ProjectState.COMPLETE:
-            console.print("[green]Already complete.[/]")
+            console.print("[green]Project already complete.[/]")
             return False
 
+        STATE_FLOW = {
+            ProjectState.CREATED: ProjectState.REQUIREMENTS_FORMALIZED,
+            ProjectState.REQUIREMENTS_FORMALIZED: ProjectState.PLANNED,
+            ProjectState.PLANNED: ProjectState.IMPLEMENTED,
+            ProjectState.IMPLEMENTING: ProjectState.IMPLEMENTED,  # for your current project2
+            ProjectState.IMPLEMENTED: ProjectState.TESTED,
+            ProjectState.TESTED: ProjectState.COMPLETE,
+        }
+        next_state = STATE_FLOW.get(self.current_state, ProjectState.COMPLETE)
+
         preview = self.preview_next_chunk()
-        next_state = ProjectState(self.current_state.value + 1)
 
         console.print(Panel.fit(
-            f"[bold]Next:[/] {next_state.name}\n"
+            f"[bold]Next step:[/] {next_state.name}\n"
             f"Input tokens: {preview.input_tokens:,}\n"
             f"Est. output:  {preview.estimated_output_tokens:,}\n"
             f"Est. cost:    ${preview.estimated_cost_usd:.6f}",
-            title="Next Step Preview",
+            title="Cost Preview - Proceed?",
             border_style="cyan"
         ))
 
-        if not Confirm.ask("Proceed?", default=True):
+        if not Confirm.ask("Proceed with this cost?", default=True):
             console.print("[yellow]Cancelled.[/]")
             return False
 
         self.transition_to(next_state)
         self.run_current_state()
+        save_project_state(self.folder, self.project, self.current_state, self.history)
         return True
+
+    def transition_to(self, new_state: ProjectState):
+        console.print(f"[blue]→ {self.current_state.name} → {new_state.name}[/]")
+        self.current_state = new_state
+        self.history.append(f"Entered {new_state.name}")
 
     def run_current_state(self):
         console.print(Panel.fit(
@@ -68,22 +98,30 @@ class StateMachine:
             border_style="green"
         ))
 
-        if self.current_state == ProjectState.REQUIREMENTS and current_project_folder:
+        if self.current_state == ProjectState.REQUIREMENTS_FORMALIZED:
             from agents.requirements_engineer import run_requirements_engineer
-            reqs = run_requirements_engineer(current_project_folder, self.project.initial_prompt)
+            run_requirements_engineer(self.folder, self.project.initial_prompt)
+            console.print("[green]✅ Requirements Engineer completed (requirements.json saved)[/]")
 
-        elif self.current_state == ProjectState.PLANNING and current_project_folder:
+        elif self.current_state == ProjectState.PLANNED:
             from agents.planner import run_planner
-            reqs = json.loads((current_project_folder / "requirements.json").read_text())
-            run_planner(current_project_folder, reqs)
+            req_file = self.folder / "requirements.json"
+            if req_file.exists():
+                reqs = json.loads(req_file.read_text(encoding="utf-8"))
+                run_planner(self.folder, reqs)
+            else:
+                console.print("[red]requirements.json missing![/]")
+
+        elif self.current_state == ProjectState.IMPLEMENTED:
+            from agents.implementer import run_implementer
+            req_file = self.folder / "requirements.json"
+            plan_file = self.folder / "plan.json"
+            if req_file.exists() and plan_file.exists():
+                reqs = json.loads(req_file.read_text(encoding="utf-8"))
+                plan = json.loads(plan_file.read_text(encoding="utf-8"))
+                run_implementer(self.folder, reqs, plan)
+            else:
+                console.print("[red]Missing requirements or plan![/]")
 
         else:
-            console.print("[dim]→ State execution stub (to be implemented)[/]")
-
-    def get_status(self):
-        return {
-            "project_name": self.project.name,
-            "current_state": self.current_state.name,
-            "history_length": len(self.history),
-            "last_state": self.history[-1] if self.history else "None"
-        }
+            console.print("[dim]→ State execution stub (next phase coming soon)[/]")

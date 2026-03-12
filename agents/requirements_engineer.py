@@ -16,7 +16,7 @@ def run_requirements_engineer(project_folder: Path, initial_prompt: str):
         {"role": "user", "content": f"User prompt:\n{initial_prompt}"}
     ]
 
-    response = llm_call(messages, model="groq/grok-beta", max_tokens=4000)
+    response = llm_call(messages, max_tokens=4000)  # now uses xAI default
 
     try:
         reqs = json.loads(response)

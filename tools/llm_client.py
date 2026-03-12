@@ -1,16 +1,23 @@
 # tools/llm_client.py
+# Version: 3.0 - Switched to xAI Grok (your $50 credits)
+
 from litellm import completion
 import os
 
 def llm_call(
     messages: list,
-    model: str = "groq/grok-beta",  # or "openai/gpt-4o", "anthropic/claude-3-5-sonnet", etc.
-    max_tokens: int = 2000,
+    model: str = "xai/grok-3-mini-beta",  # ← official xAI model via LiteLLM (fast + cheap)
+    max_tokens: int = 4000,
     temperature: float = 0.7,
     **kwargs
 ):
-    api_key = os.getenv("GROK_API_KEY") if "grok" in model.lower() else None
-    # Add other key mappings if needed
+    # Correct key for xAI
+    if "xai" in model.lower():
+        api_key = os.getenv("XAI_API_KEY")
+        if not api_key:
+            raise ValueError("❌ XAI_API_KEY is missing in .env file! (use your Grok/xAI key)")
+    else:
+        api_key = None
 
     response = completion(
         model=model,
