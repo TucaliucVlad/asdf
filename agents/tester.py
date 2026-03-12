@@ -1,70 +1,59 @@
 from pathlib import Path
-import ast
+from core.json_validator import JsonValidator
+from core.retry_policy import retry_policy
+from tools.llm_client import llm_call
+import json
 
 def run(project_id: str, previous_output: dict):
-    """Dynamic + adaptive tester — reads real code + uses existing test_generation.schema.json via L1.
-    Converges with L2 feedback loop until tests pass."""
+    """General tester using test_generation.schema.json — FORCES correct src import + robust tests only."""
     project_root = Path(f"projects/playground/{project_id}")
-    main_file = project_root / "src/main.py"
-    
-    code = main_file.read_text(encoding="utf-8") if main_file.exists() else ""
-    
-    # AST introspection (uses real generated code, no guessing)
-    class_name = "ParabolaPlotter"
-    plot_methods = []
-    try:
-        tree = ast.parse(code)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                class_name = node.name
-            if isinstance(node, ast.FunctionDef):
-                name = node.name.lower()
-                if any(k in name for k in ['plot', 'draw', 'update', 'render', 'append']):
-                    plot_methods.append(node.name)
-    except:
-        pass
-    
-    test_content = """
-import unittest
-from unittest.mock import Mock, patch
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+    main_code = (project_root / "src/main.py").read_text(encoding="utf-8") if (project_root / "src/main.py").exists() else ""
 
-class Test{0}(unittest.TestCase):
-    @patch('tkinter.Tk')
-    @patch('matplotlib.backends.backend_tkagg.FigureCanvasTkAgg')
-    def setUp(self, mock_canvas, mock_tk):
-        self.mock_root = mock_tk.return_value
-        from src.main import {0}
-        self.app = {0}(self.mock_root)
-    
-    def test_app_creation(self):
-        self.assertIsNotNone(self.app)
-    
-    def test_has_plot_method(self):
-        methods = [m for m in dir(self.app) if callable(getattr(self.app, m)) and any(k in m.lower() for k in ['plot', 'draw', 'update', 'render', 'append'])]
-        self.assertTrue(len(methods) > 0, f"No plot method found. Found: {{methods}}")
-    
-    def test_has_a_b_c_entries(self):
-        self.assertTrue(any(hasattr(self.app, attr) for attr in ['a_entry', 'b_entry', 'c_entry', 'entry_a', 'entry_b', 'entry_c']))
-    
-    def test_has_canvas_and_grid(self):
-        self.assertTrue(hasattr(self.app, 'canvas') or hasattr(self.app, 'figure'))
-        # Grid + legend support is tested via presence of matplotlib objects
+    schema_path = Path("schemas/test_generation.schema.json")
+    schema = schema_path.read_text(encoding="utf-8") if schema_path.exists() else "{}"
 
-if __name__ == "__main__":
-    unittest.main()
-""".format(class_name)
+    system = f"""Output ONLY valid JSON matching this schema exactly:
 
-    test_data = {
-        "batch_id": f"{project_id}-tests",
-        "task_ids": ["convergence-test"],
-        "test_files": [{
-            "path": "tests/test_main.py",
-            "content": test_content
-        }]
-    }
-    
-    print(f"✅ Adaptive convergence tests generated for class: {class_name} | Detected plot methods: {plot_methods}")
-    return test_data
+{schema}
+
+CRITICAL RULES (general for ANY project — no exceptions):
+- ALWAYS use path: "tests/test_main.py" (never root level)
+- ALWAYS start test file with:
+  import sys
+  from pathlib import Path
+  sys.path.insert(0, str(Path(__file__).parent.parent))
+  import os
+  os.environ['MPLBACKEND'] = 'Agg'
+- ALWAYS import main class as: from src.main import YourClassName
+- NEVER use 'from main' or relative imports
+- Tests must be ROBUST behavioral only: hasattr, callable checks, "at least 1", grid enabled, mouse bind detection
+- Test for a/b/c entries, canvas/figure, plot methods (single/append), mouse events (if present)
+- Include full main.py context below:
+
+=== MAIN CODE ===
+{main_code[:2000]}
+=== END ==="""
+
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": f"Project {project_id} — generate robust test JSON now."}
+    ]
+
+    for attempt in range(4):
+        try:
+            raw = llm_call(messages, model="xai/grok-code-fast-1", max_tokens=8000, temperature=0.0)
+            print(f"   [DEBUG LLM attempt {attempt}] {raw[:300]}...")
+
+            if "```" in raw:
+                raw = raw.split("```")[1].strip()
+            output = json.loads(raw)
+
+            validated = retry_policy.l1_validate_and_retry(output, "test_generation", f"test-{attempt}", ["test-1"])
+            print("✅ General robust convergence tests generated (correct src import + behavioral only)")
+            return validated
+
+        except Exception as e:
+            messages.append({"role": "user", "content": str(e) + "\nFix ONLY JSON structure. Use 'from src.main import' and sys.path."})
+            print(f"   → L1 retry {attempt+1}")
+
+    raise ValueError("Tester convergence exhausted")

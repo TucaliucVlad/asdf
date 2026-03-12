@@ -7,4 +7,7 @@ and a xy axis system. everything on the same gui, not multiple windows. I must a
 have a button which appends different plots and updates the legend, or a button which
 makes a single plot. I also want the possibility to fix a point with the mouse on the 
 parabola. In that point I want the tangent to appear plotted. No legend for the tangent. 
-It must be maximum one tangent per parabola.
+It must be maximum one tangent per parabola, and the tangent line must ocupy te entire
+xy limits. I want to be able to set manualy xlim and ylim. I also want to find for the selected 
+point the curvature of the parabola. This curvature must be shown in the legend as a text 
+continuation. No more than 5 digits shall be used for the radius. I also want the app to support full screen.
