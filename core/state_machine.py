@@ -1,127 +1,101 @@
-# core/state_machine.py
-# Version: 5.2 - Implementation Agent integrated (runs on IMPLEMENTED for current projects)
-
-import json
+from enum import Enum, auto
 from pathlib import Path
-from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Confirm
+from typing import Dict, Any, Optional
+import json
+from core.retry_policy import retry_policy
 
-from core.models import Project, ProjectState, CostEstimate
-from tools.token_counter import count_tokens, estimate_cost
-from tools.project_manager import save_project_state
-
-console = Console()
+class ProjectState(Enum):
+    """Full state machine per Correction Pack — includes all L1/L2 retry paths."""
+    CREATED = auto()
+    REQUIREMENTS_FORMALIZED = auto()
+    PLANNED = auto()
+    
+    # === L1 Protection Path ===
+    L1_VALIDATE = auto()
+    PROTECTION_LEVEL_1_RETRY_1 = auto()
+    PROTECTION_LEVEL_1_RETRY_2 = auto()
+    PROTECTION_LEVEL_1_RETRY_3 = auto()
+    FAILED_L1_EXHAUSTED = auto()
+    
+    # === Materialization & L2 Protection Path ===
+    MATERIALIZE_FILES = auto()
+    RUN_TESTS = auto()
+    PROTECTION_LEVEL_2_RETRY_1 = auto()
+    PROTECTION_LEVEL_2_RETRY_2 = auto()
+    PROTECTION_LEVEL_2_RETRY_3 = auto()
+    FAILED_L2_EXHAUSTED = auto()
+    
+    REVIEW_BATCH = auto()
+    COMPLETE = auto()
+    FAILED = auto()  # terminal failure state
 
 class StateMachine:
-    def __init__(self, project: Project, folder: Path):
-        self.project = project
-        self.folder = folder
-        self.current_state = ProjectState.CREATED
-        self.history: list[str] = []
-
-        state_file = folder / "state.json"
-        if state_file.exists():
-            data = json.loads(state_file.read_text())
-            old_state = data["current_state"]
-            mapping = {
-                "IDLE": "CREATED",
-                "ANALYZE": "REQUIREMENTS_FORMALIZED",
-                "REQUIREMENTS": "REQUIREMENTS_FORMALIZED",
-                "CLARIFY": "REQUIREMENTS_FORMALIZED",
-                "PLANNING": "PLANNED",
-                "IMPLEMENTING": "IMPLEMENTED",   # backward compat for your project2
-            }
-            self.current_state = ProjectState(mapping.get(old_state, old_state))
-            self.history = data.get("history", [])
-
-    def preview_next_chunk(self) -> CostEstimate:
-        messages = [
-            {"role": "system", "content": "You are starting analysis."},
-            {"role": "user", "content": self.project.initial_prompt[:2000]}
-        ]
-        input_tokens = count_tokens(messages)
-        est_output = min(1500, len(self.project.initial_prompt) // 4 + 500)
-        cost_usd = estimate_cost(input_tokens, est_output)
-
-        return CostEstimate(
-            input_tokens=input_tokens,
-            estimated_output_tokens=est_output,
-            estimated_cost_usd=cost_usd,
-            model_used="xai/grok-3-mini-beta"
-        )
-
-    def advance(self) -> bool:
-        if self.current_state == ProjectState.COMPLETE:
-            console.print("[green]Project already complete.[/]")
-            return False
-
-        STATE_FLOW = {
-            ProjectState.CREATED: ProjectState.REQUIREMENTS_FORMALIZED,
-            ProjectState.REQUIREMENTS_FORMALIZED: ProjectState.PLANNED,
-            ProjectState.PLANNED: ProjectState.IMPLEMENTED,
-            ProjectState.IMPLEMENTING: ProjectState.IMPLEMENTED,  # for your current project2
-            ProjectState.IMPLEMENTED: ProjectState.TESTED,
-            ProjectState.TESTED: ProjectState.COMPLETE,
+    """Deterministic state transitions with retry awareness."""
+    
+    def __init__(self, project_id: str):
+        self.project_id = project_id
+        self.state_file = Path(f"projects/{project_id}/state.json")
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        self.current_state = self._load_state()
+    
+    def _load_state(self) -> ProjectState:
+        if self.state_file.exists():
+            data = json.loads(self.state_file.read_text(encoding="utf-8"))
+            return ProjectState[data.get("state", "CREATED")]
+        return ProjectState.CREATED
+    
+    def _save_state(self, new_state: ProjectState, metadata: Optional[Dict[str, Any]] = None) -> None:
+        data = {
+            "state": new_state.name,
+            "project_id": self.project_id,
+            "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
+            "metadata": metadata or {}
         }
-        next_state = STATE_FLOW.get(self.current_state, ProjectState.COMPLETE)
-
-        preview = self.preview_next_chunk()
-
-        console.print(Panel.fit(
-            f"[bold]Next step:[/] {next_state.name}\n"
-            f"Input tokens: {preview.input_tokens:,}\n"
-            f"Est. output:  {preview.estimated_output_tokens:,}\n"
-            f"Est. cost:    ${preview.estimated_cost_usd:.6f}",
-            title="Cost Preview - Proceed?",
-            border_style="cyan"
-        ))
-
-        if not Confirm.ask("Proceed with this cost?", default=True):
-            console.print("[yellow]Cancelled.[/]")
-            return False
-
-        self.transition_to(next_state)
-        self.run_current_state()
-        save_project_state(self.folder, self.project, self.current_state, self.history)
-        return True
-
-    def transition_to(self, new_state: ProjectState):
-        console.print(f"[blue]→ {self.current_state.name} → {new_state.name}[/]")
+        self.state_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
         self.current_state = new_state
-        self.history.append(f"Entered {new_state.name}")
-
-    def run_current_state(self):
-        console.print(Panel.fit(
-            f"[bold green]Executing {self.current_state.name}[/]",
-            title="State Execution",
-            border_style="green"
-        ))
-
-        if self.current_state == ProjectState.REQUIREMENTS_FORMALIZED:
-            from agents.requirements_engineer import run_requirements_engineer
-            run_requirements_engineer(self.folder, self.project.initial_prompt)
-            console.print("[green]✅ Requirements Engineer completed (requirements.json saved)[/]")
-
-        elif self.current_state == ProjectState.PLANNED:
-            from agents.planner import run_planner
-            req_file = self.folder / "requirements.json"
-            if req_file.exists():
-                reqs = json.loads(req_file.read_text(encoding="utf-8"))
-                run_planner(self.folder, reqs)
-            else:
-                console.print("[red]requirements.json missing![/]")
-
-        elif self.current_state == ProjectState.IMPLEMENTED:
-            from agents.implementer import run_implementer
-            req_file = self.folder / "requirements.json"
-            plan_file = self.folder / "plan.json"
-            if req_file.exists() and plan_file.exists():
-                reqs = json.loads(req_file.read_text(encoding="utf-8"))
-                plan = json.loads(plan_file.read_text(encoding="utf-8"))
-                run_implementer(self.folder, reqs, plan)
-            else:
-                console.print("[red]Missing requirements or plan![/]")
-
-        else:
-            console.print("[dim]→ State execution stub (next phase coming soon)[/]")
+    
+    def transition(self, next_state: ProjectState, batch_id: str = "", task_ids: list = None, metadata: Optional[Dict[str, Any]] = None) -> ProjectState:
+        """Enforces valid transitions + auto-routes through protection levels."""
+        task_ids = task_ids or []
+        
+        # Auto-insert protection states when needed
+        if next_state in (ProjectState.MATERIALIZE_FILES, ProjectState.REVIEW_BATCH):
+            self._save_state(ProjectState.L1_VALIDATE, {"batch_id": batch_id, "task_ids": task_ids})
+            return ProjectState.L1_VALIDATE  # L1 always runs first
+        
+        if next_state == ProjectState.RUN_TESTS:
+            self._save_state(ProjectState.RUN_TESTS, {"batch_id": batch_id, "task_ids": task_ids})
+            return ProjectState.RUN_TESTS
+        
+        # Record the final transition
+        self._save_state(next_state, metadata)
+        return next_state
+    
+    def handle_l1_failure(self, retry_index: int, batch_id: str, task_ids: list) -> ProjectState:
+        """Maps L1 retry exhaustion to state."""
+        if retry_index >= retry_policy.MAX_L1_RETRIES:
+            self._save_state(ProjectState.FAILED_L1_EXHAUSTED)
+            return ProjectState.FAILED_L1_EXHAUSTED
+        retry_state = {
+            0: ProjectState.PROTECTION_LEVEL_1_RETRY_1,
+            1: ProjectState.PROTECTION_LEVEL_1_RETRY_2,
+            2: ProjectState.PROTECTION_LEVEL_1_RETRY_3
+        }[retry_index]
+        self._save_state(retry_state)
+        return retry_state
+    
+    def handle_l2_failure(self, retry_index: int, batch_id: str, task_ids: list) -> ProjectState:
+        """Maps L2 retry exhaustion to state."""
+        if retry_index >= retry_policy.MAX_L2_RETRIES:
+            self._save_state(ProjectState.FAILED_L2_EXHAUSTED)
+            return ProjectState.FAILED_L2_EXHAUSTED
+        retry_state = {
+            0: ProjectState.PROTECTION_LEVEL_2_RETRY_1,
+            1: ProjectState.PROTECTION_LEVEL_2_RETRY_2,
+            2: ProjectState.PROTECTION_LEVEL_2_RETRY_3
+        }[retry_index]
+        self._save_state(retry_state)
+        return retry_state
+    
+    def is_terminal(self) -> bool:
+        return self.current_state in (ProjectState.COMPLETE, ProjectState.FAILED, ProjectState.FAILED_L1_EXHAUSTED, ProjectState.FAILED_L2_EXHAUSTED)
