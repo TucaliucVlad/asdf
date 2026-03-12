@@ -1,3 +1,4 @@
-Build a small Python command-line tool that asks for a number n and prints the factorial of n.
-Use recursion and add basic error handling for negative numbers or non-integers.
-Make it user-friendly with clear output formatting.
+# DYNAMIC USER SEED — EDIT THIS FOR EVERY NEW PROJECT
+# (this is the only file you will change per project)
+
+Build a simple hello-world CLI tool that prints "Hello from protected pipeline!" and has one unit test.
