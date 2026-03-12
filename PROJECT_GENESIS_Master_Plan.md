@@ -1,1640 +1,1001 @@
-# PROJECT GENESIS — Complete Planning Document
+# PROJECT GENESIS — Correction Pack
 
-## 1. Purpose
+This document is a targeted supplement to **PROJECT_GENESIS_Master_Plan.md**. It corrects the three concrete weaknesses identified in review:
 
-This document translates the PROJECT GENESIS vision into an executable engineering plan. It turns the high-level concept into:
+1. the original plan was still high-level around **Protection Level 1 / Level 2 retry logic** and **strict JSON schemas**;
+2. the original plan referenced a few extra agents that were not yet specified at implementation level;
+3. the original plan did not include enough **copy-paste-ready examples** for schema enforcement, YAML workflows, and critical control logic.
 
-- a concrete system architecture,
-- a deterministic workflow model,
-- an implementation roadmap,
-- explicit responsibilities per agent,
-- measurable test and acceptance criteria,
-- operational safeguards for autonomous execution,
-- and a staged path from MVP to self-evolving desktop product.
-
-The scope of this plan is intentionally broader and more concrete than the original prompt. The goal is not merely to restate the vision, but to close the missing engineering gaps that would otherwise block implementation.
+This addendum is intentionally narrow. It does **not** replace the master plan; it makes the previously vague parts operational.
 
 ---
 
-## 2. Mission Definition
+## 1. Exact Protection Logic
 
-PROJECT GENESIS is a local-first, workflow-driven autonomous software factory. It starts from a single user idea and converts that idea into a complete implemented project through a strict sequence of:
+The protection system has exactly two levels:
 
-1. requirement discovery,
-2. domain expansion and clarification,
-3. exhaustive requirements synthesis,
-4. implementation planning,
-5. deterministic execution in task batches,
-6. automatic testing,
-7. review and gap detection,
-8. documentation and cost tracking,
-9. safe self-improvement.
+- **Level 1** = structural failure of the LLM output before file materialization.
+- **Level 2** = semantic/runtime failure after file materialization and test execution.
 
-The system is CLI-first, state-machine-driven, and workflow-configured via YAML. LLMs do not directly manipulate the repository arbitrarily; they emit structured JSON which is validated and then materialized by deterministic tooling.
+The protection logic is deterministic and must be implemented as a finite retry policy with append-only logging.
 
-The final product evolves into a desktop application with pluggable model providers, monetization primitives, and a safe self-evolution engine.
+### 1.1 Level 1 — Structural / Format Recovery
 
----
+#### 1.1.1 Trigger conditions
+Level 1 triggers if **any** of the following is true:
 
-## 3. Guiding Principles
+1. No fenced JSON block was found when JSON was required.
+2. More than one fenced JSON block was found when a single block was required.
+3. JSON parsing fails.
+4. JSON root type is incorrect.
+5. Required keys are missing.
+6. Any field violates the schema type or cardinality.
+7. A file path attempts escape (`..`, absolute path outside project root, drive prefix, null byte).
+8. Duplicate file paths exist in the same payload.
+9. Content is missing for a file entry.
+10. Unknown top-level keys are present when `additionalProperties=false` is enforced.
 
-### 3.1 Determinism over improvisation
-Every important stage must be represented as an explicit workflow definition and an explicit state in the state machine.
+#### 1.1.2 Retry budget
+- `MAX_L1_RETRIES = 3`
+- Retries are counted **per stage invocation**, not globally for the project.
+- After the third failed structural correction, the batch enters `FAILED_L1_EXHAUSTED` and stops.
 
-### 3.2 Structured generation only
-LLM outputs are never trusted as raw code patches. They must pass through a strict JSON contract and deterministic writers/scaffolders.
+#### 1.1.3 Correction prompt policy
+The correction prompt must:
 
-### 3.3 Autonomous, but bounded
-Autonomy is the default, but protected by hard safety rails:
+- preserve all original semantic content,
+- request **structure-only repair**,
+- restate the exact schema contract,
+- include the validation error list,
+- forbid commentary outside the JSON block.
 
-- maximum three retries per protection level,
-- schema validation before file writes,
-- test-gated progression,
-- immutable logs,
-- dependency checks before core changes,
-- human approval only where explicitly required.
-
-### 3.4 Total traceability
-Every prompt, response, token count, dollar estimate, retry, file write, test run, and review action must be logged.
-
-### 3.5 Self-improvement without regression
-The system may improve itself only through the same controlled pipeline it uses for user projects, and only after sandbox validation.
-
-### 3.6 Reusability before proliferation
-New agents are created only when existing agents do not meet the reuse threshold. Agent reuse is intentional and measurable.
-
----
-
-## 4. Product Objectives
-
-## 4.1 Functional objectives
-The system must:
-
-- accept a user idea as the initiating prompt,
-- decompose the idea across domains and subdomains,
-- run a structured clarification loop,
-- generate exhaustive requirements,
-- create a complete implementation plan with tests and skill requirements,
-- execute work in batches,
-- generate and run tests automatically,
-- self-correct structural and runtime failures,
-- produce detailed documentation throughout execution,
-- track cost locally before execution and cumulatively after execution,
-- compute pricing reports from execution logs,
-- support future self-rebuild and desktop packaging.
-
-## 4.2 Non-functional objectives
-The system must be:
-
-- deterministic in control flow,
-- auditable,
-- modular,
-- extensible for new workflows and agents,
-- safe for self-modification,
-- provider-agnostic across LLM backends,
-- suitable for local desktop deployment.
-
----
-
-## 5. System Scope
-
-## 5.1 In scope for the foundation and MVP
-
-- CLI orchestration
-- workflow YAML loading and execution
-- requirements and planning pipeline
-- JSON extraction, validation, and writing
-- scaffolding engine
-- test generation and pytest execution
-- protection loops for malformed outputs and failing code
-- execution log and pricing engine
-- project-level implementation folders
-- documentation tracking
-- self-build proof using computePricing
-
-## 5.2 Deferred but planned
-
-- desktop GUI with Tauri/Electron
-- multi-provider API key management UI
-- credit marketplace and monetization engine
-- agent-pack marketplace
-- white-label project generation
-- automated dependency graphing for self-evolution
-- sandbox self-evolution pipeline
-- analytics dashboard
-
----
-
-## 6. Proposed Repository Architecture
-
-This section fills in a missing practical layer: where the components should live.
+#### 1.1.4 Deterministic retry sequence
 
 ```text
-repo_root/
-├─ main.py
-├─ requirements.txt
-├─ README.md
-├─ core/
-│  ├─ __init__.py
-│  ├─ state_machine.py
-│  ├─ workflow_loader.py
-│  ├─ workflow_executor.py
-│  ├─ execution_context.py
-│  ├─ retry_policy.py
-│  ├─ stage_router.py
-│  └─ coverage_gate.py
-├─ agents/
-│  ├─ __init__.py
-│  ├─ base_agent.py
-│  ├─ registry.py
-│  ├─ reuse_matcher.py
-│  ├─ requirements_engineer.py
-│  ├─ brainstormer.py
-│  ├─ planner.py
-│  ├─ implementer.py
-│  ├─ tester.py
-│  ├─ reviewer.py
-│  ├─ documenter.py
-│  ├─ protection_agent.py
-│  └─ self_evolution_agent.py
-├─ tools/
-│  ├─ __init__.py
-│  ├─ scaffolder.py
-│  ├─ json_writer.py
-│  ├─ pricing_engine.py
-│  ├─ prompt_builder.py
-│  ├─ token_counter.py
-│  ├─ log_writer.py
-│  ├─ test_runner.py
-│  ├─ schema_validator.py
-│  ├─ csv_exporter.py
-│  └─ dependency_graph.py
-├─ workflows/
-│  ├─ 01_scaffolding.yaml
-│  ├─ 02_code_writing.yaml
-│  ├─ 03_testing.yaml
-│  ├─ 04_review.yaml
-│  └─ 05_documentation.yaml
-├─ schemas/
-│  ├─ scaffolding.schema.json
-│  ├─ code_writing.schema.json
-│  ├─ execution_log.schema.json
-│  ├─ workflow.schema.json
-│  └─ documentation_report.schema.json
-├─ projects/
-│  └─ <project-id>/
-│     ├─ input/
-│     ├─ implementation/
-│     ├─ docs/
-│     ├─ reports/
-│     ├─ logs/
-│     │  └─ execution_log.json
-│     ├─ tests/
-│     └─ artifacts/
-├─ tests/
-│  ├─ unit/
-│  ├─ integration/
-│  ├─ regression/
-│  └─ fixtures/
-└─ scripts/
-   ├─ bootstrap.sh
-   ├─ run_tests.sh
-   └─ export_pricing.sh
+Attempt 0: Original model response
+  -> validate JSON envelope
+  -> validate schema
+  -> validate paths
+  -> if all pass: SUCCESS
+  -> else: Protection Level 1
+
+Attempt 1: Send corrective prompt with original response + validation errors
+  -> validate again
+
+Attempt 2: Same model, stricter corrective prompt, include first failure + second failure
+  -> validate again
+
+Attempt 3: Same model OR designated fallback formatter model
+  -> validate again
+
+If still invalid:
+  -> mark batch failed
+  -> write immutable failure event
+  -> do not materialize files
 ```
 
-This structure separates orchestration, agents, tools, schemas, workflows, and per-project outputs. It also gives a clean path for later desktop wrapping without disturbing the engine.
+#### 1.1.5 State transitions
 
----
+```text
+CODE_WRITING -> L1_VALIDATE ->
+  PASS -> MATERIALIZE_FILES
+  FAIL -> PROTECTION_LEVEL_1_RETRY_1
+  FAIL -> PROTECTION_LEVEL_1_RETRY_2
+  FAIL -> PROTECTION_LEVEL_1_RETRY_3
+  FAIL -> FAILED_L1_EXHAUSTED
+```
 
-## 7. Core Domain Model
-
-A missing requirement in the prompt is a formal domain model. The following entities should exist explicitly in code and/or schema.
-
-## 7.1 Project
-Represents one autonomous build initiated from one client prompt.
-
-Suggested fields:
-
-- `project_id`
-- `project_name`
-- `created_at`
-- `status`
-- `client_prompt`
-- `autonomous`
-- `current_stage`
-- `active_workflow`
-- `requirements_version`
-- `plan_version`
-- `repo_root`
-- `implementation_root`
-- `execution_log_path`
-
-## 7.2 Agent Definition
-Represents a reusable agent capability.
-
-Suggested fields:
-
-- `agent_id`
-- `agent_name`
-- `agent_role`
-- `description`
-- `skills`
-- `model_preferences`
-- `supported_workflows`
-- `history_path`
-- `reuse_score_metadata`
-
-## 7.3 Task
-Represents a unit of planned work.
-
-Suggested fields:
-
-- `task_id`
-- `requirement_id`
-- `title`
-- `description`
-- `batch_id`
-- `dependencies`
-- `owner_agent`
-- `skills_required`
-- `files_expected`
-- `tests_required`
-- `acceptance_criteria`
-- `status`
-
-## 7.4 Workflow Definition
-Loaded from YAML.
-
-Suggested fields:
-
-- `workflow_id`
-- `name`
-- `stage`
-- `model`
-- `prompt_template`
-- `max_tokens`
-- `input_schema`
-- `output_schema`
-- `success_criteria`
-- `test_procedure`
-- `retry_policy`
-- `handoff_rules`
-
-## 7.5 Execution Log Entry
-The execution log must be append-only and structured.
-
-Suggested fields:
+#### 1.1.6 Required log fields for each Level 1 retry
+Each retry appends a log entry with:
 
 - `timestamp`
 - `project_id`
 - `stage`
-- `workflow_id`
+- `protection_level = 1`
+- `retry_index`
 - `agent_name`
-- `attempt_number`
-- `retry_level`
-- `prompt_full`
-- `response_full`
-- `prompt_tokens`
-- `response_tokens`
-- `total_tokens`
-- `usd_cost`
-- `action_type`
-- `action_status`
-- `files_written`
-- `tests_run`
-- `tests_passed`
-- `tests_failed`
-- `error_summary`
-- `duration_ms`
-
-## 7.6 Documentation Record
-Tracks why a piece of documentation exists.
-
-Suggested fields:
-
-- `doc_id`
-- `related_task_id`
-- `created_by_agent`
-- `artifact_type`
-- `purpose`
-- `consumer`
-- `storage_path`
-- `summary`
-- `commit_message_candidate`
+- `model_name`
+- `validation_errors[]`
+- `original_response_hash`
+- `corrective_prompt_hash`
+- `token_counts.prompt`
+- `token_counts.response`
+- `dollar_cost`
+- `result = pass|fail`
 
 ---
 
-## 8. Agent Architecture
+### 1.2 Level 2 — Runtime / Test Recovery
 
-The original prompt names multiple agent roles but does not fully define their contracts. This section closes that gap.
+#### 1.2.1 Trigger conditions
+Level 2 triggers only **after** valid files were written and one of the following occurs:
 
-## 8.1 Requirements Engineer Agent
-### Responsibilities
-- parse the client prompt,
-- identify primary domains and subdomains,
-- synthesize domain-specific interpretations,
-- formulate clarification questions,
-- decide when clarification is sufficient,
-- produce the exhaustive requirements document,
-- review the planner’s plan for full coverage.
+1. `pytest` returns non-zero.
+2. Import errors occur.
+3. Syntax errors occur.
+4. Runtime exceptions occur in the test phase.
+5. Coverage gate fails for newly introduced modules.
+6. Review detects that a requirement was not actually implemented, even though tests passed.
 
-### Inputs
-- client prompt,
-- brainstorm outputs,
-- prior clarification answers,
-- repository and system context.
+#### 1.2.2 Retry budget
+- `MAX_L2_RETRIES = 3`
+- Retries are counted **per batch**, not per file.
+- Every Level 2 retry must add or preserve a regression test for the observed failure.
 
-### Outputs
-- domain map,
-- clarification list,
-- complete requirements document,
-- plan review decision.
+#### 1.2.3 Regeneration policy
+At Level 2, the system must notify **both** the Implementer and the Tester.
 
-### Acceptance criteria
-- every major domain activated by the idea is represented,
-- requirements are testable and implementation-linked,
-- no ambiguous “nice to have” statements remain unclassified.
+Inputs to the regeneration prompt must include:
 
-## 8.2 Brainstormer Agents
-Multiple agents working in parallel.
+- original task description,
+- exact failing test names,
+- traceback,
+- affected file paths,
+- current implementation snippets,
+- coverage shortfall if relevant,
+- instruction that the fix must preserve already passing behavior.
 
-### Responsibilities
-- propose completions,
-- identify missing adjacent domains,
-- surface implementation risks,
-- produce clarification prompts,
-- propose architecture alternatives.
+#### 1.2.4 Deterministic retry sequence
 
-### Acceptance criteria
-- output is additive, not repetitive,
-- each brainstorm contribution either clarifies, expands, or derisks.
+```text
+Run pytest
+  -> PASS + coverage gate PASS + review PASS => SUCCESS
+  -> FAIL => Protection Level 2
 
-## 8.3 Planner Agent
-### Responsibilities
-- transform requirements into tasks and batches,
-- define tests for each task,
-- define required skills,
-- perform agent reuse matching,
-- create new agent stubs when needed,
-- plan resource and dependency sequencing.
+Retry 1:
+  Implementer regenerates code delta in strict JSON
+  Tester regenerates failing and regression tests in strict JSON
+  materialize
+  rerun pytest
 
-### Acceptance criteria
-- every requirement maps to at least one task,
-- every task has acceptance criteria and tests,
-- traceability requirement-to-task is complete.
+Retry 2:
+  same, with cumulative failure history added
+  rerun pytest
 
-## 8.4 Implementer Agent
-### Responsibilities
-- generate JSON-only code change proposals,
-- include file intent and test instructions,
-- embed try-except logic where appropriate,
-- keep implementation within the task scope.
+Retry 3:
+  same, with root-cause summary forced into prompt
+  rerun pytest
 
-### Acceptance criteria
-- valid JSON,
-- files align to intent,
-- generated code is testable and bounded.
-
-## 8.5 Tester Agent
-### Responsibilities
-- generate pytest tests from task intent and acceptance criteria,
-- add regression tests when failures occur,
-- ensure tests are isolated and deterministic.
-
-### Acceptance criteria
-- tests meaningfully validate the requirement,
-- regression tests capture prior failures,
-- flaky tests are rejected or repaired.
-
-## 8.6 Reviewer Agent
-### Responsibilities
-- inspect batch outputs,
-- verify requirement coverage,
-- detect omissions or shallow implementations,
-- approve progression or send back gaps.
-
-### Acceptance criteria
-- evidence-based decisions tied to requirements,
-- no progression on partial coverage.
-
-## 8.7 Documenter Agent
-### Responsibilities
-- maintain documentation records,
-- explain why artifacts were created,
-- produce per-task reports,
-- prepare git-friendly change summaries,
-- support auditability and later onboarding.
-
-### Acceptance criteria
-- every significant task has a report,
-- reports describe purpose, method, result, and impact.
-
-## 8.8 Protection Agent
-### Responsibilities
-- handle malformed or schema-invalid responses,
-- handle runtime and test failures,
-- enforce bounded retries,
-- escalate or fail safely after retry exhaustion.
-
-### Levels
-- **Level 1:** format/schema/parsing failure
-- **Level 2:** runtime/test failure
-
-### Acceptance criteria
-- corrective prompts are scoped narrowly,
-- retries do not mutate validated content unnecessarily,
-- failure reason remains traceable.
-
-## 8.9 Self-Evolution Agent
-### Responsibilities
-- analyze post-delivery execution history,
-- inspect dependency graph,
-- propose bounded improvements,
-- run changes in sandbox,
-- escalate for approval on core modifications.
-
-### Acceptance criteria
-- no direct unsafe mutation of core without approval,
-- all changes go through full pipeline.
-
----
-
-## 9. Agent Reuse and Matching Policy
-
-The prompt references a 75 percent reuse threshold. This requires a concrete scoring method.
-
-## 9.1 Proposed reuse score formula
-For each candidate agent, compute a weighted score:
-
-- role similarity: 30%
-- skill overlap: 30%
-- workflow overlap: 20%
-- historical success on similar tasks: 10%
-- domain familiarity: 10%
-
-`reuse_score = weighted sum * 100`
-
-## 9.2 Reuse rule
-- `>= 75`: reuse existing agent
-- `< 75`: create new stub agent
-
-## 9.3 New stub agent initialization
-When creating a new stub:
-
-- generate `agent_id`
-- assign role and skill profile
-- create history file
-- link candidate workflows
-- initialize with zero-shot or example-driven prompt profile
-
-## 9.4 Required implementation detail
-The planner must record in the plan:
-
-- all candidate agents evaluated,
-- reuse score breakdown per candidate,
-- final reuse/create decision.
-
----
-
-## 10. Workflow System Design
-
-The entire engine depends on workflow YAML files. Their schema must be uniform.
-
-## 10.1 Required YAML fields
-Each workflow YAML must contain at minimum:
-
-```yaml
-workflow_id: string
-name: string
-stage: string
-description: string
-model: string
-max_tokens: integer
-prompt_template: string
-input_contract:
-  required_fields: []
-output_contract:
-  schema_ref: string
-success_criteria: []
-test_procedure: []
-retry_policy:
-  max_retries: 3
-  protection_level: level1|level2|mixed
-handoff_rules:
-  next_on_success: string
-  next_on_failure: string
-telemetry:
-  log_prompt: true
-  log_response: true
-  log_tokens: true
-  log_cost: true
+If still failing:
+  -> mark batch FAILED_L2_EXHAUSTED
+  -> stop downstream progression
 ```
 
-## 10.2 Mandatory workflows for Phase 2
-Exactly five files:
+#### 1.2.5 Level 2 success condition
+A Level 2 cycle is considered resolved only if **all** are true:
 
-1. `01_scaffolding.yaml`
-2. `02_code_writing.yaml`
-3. `03_testing.yaml`
-4. `04_review.yaml`
-5. `05_documentation.yaml`
+1. all tests in the batch pass,
+2. no previously passing tests regress,
+3. coverage for touched new modules remains at or above the configured threshold,
+4. reviewer marks requirement coverage as complete for the batch.
 
-## 10.3 Execution semantics
-The state machine must:
+#### 1.2.6 State transitions
 
-- load workflows from the folder dynamically,
-- validate YAML against workflow schema,
-- register corresponding executable stages,
-- reject startup if mandatory workflows are missing or invalid.
+```text
+MATERIALIZE_FILES -> RUN_TESTS ->
+  PASS -> REVIEW_BATCH
+  FAIL -> PROTECTION_LEVEL_2_RETRY_1
+  FAIL -> PROTECTION_LEVEL_2_RETRY_2
+  FAIL -> PROTECTION_LEVEL_2_RETRY_3
+  FAIL -> FAILED_L2_EXHAUSTED
+```
 
----
+#### 1.2.7 Required log fields for each Level 2 retry
+Each retry appends a log entry with:
 
-## 11. State Machine Design
-
-The state machine is described in the prompt as immense, but that is not actionable until formalized.
-
-## 11.1 Minimum state set for MVP
-
-- `INIT`
-- `LOAD_PROJECT`
-- `LOAD_WORKFLOWS`
-- `PRICE_PREVIEW`
-- `REQUIREMENTS_ANALYSIS`
-- `BRAINSTORMING`
-- `CLARIFICATION`
-- `REQUIREMENTS_FINALIZATION`
-- `PLANNING`
-- `PLAN_REVIEW`
-- `SCAFFOLDING`
-- `CODE_WRITING`
-- `TESTING`
-- `REVIEW_BATCH`
-- `DOCUMENTATION`
-- `PROTECTION_LEVEL_1`
-- `PROTECTION_LEVEL_2`
-- `BATCH_COMPLETE`
-- `PROJECT_COMPLETE`
-- `SELF_EVOLUTION_PENDING`
-- `FAILED`
-
-## 11.2 Required transitions
-Examples:
-
-- `LOAD_WORKFLOWS -> PRICE_PREVIEW`
-- `PRICE_PREVIEW -> REQUIREMENTS_ANALYSIS`
-- `CLARIFICATION -> REQUIREMENTS_FINALIZATION` when clarity threshold reached
-- `CODE_WRITING -> TESTING` after valid JSON write
-- `TESTING -> REVIEW_BATCH` if green
-- `TESTING -> PROTECTION_LEVEL_2` if red
-- `CODE_WRITING -> PROTECTION_LEVEL_1` on malformed JSON
-- `REVIEW_BATCH -> CODE_WRITING` if gaps detected
-- `REVIEW_BATCH -> PROJECT_COMPLETE` when all tasks complete
-
-## 11.3 Clarification completion policy
-The prompt implies either the user or an autonomous decider ends the clarification loop. This should be made explicit.
-
-Proposed rule:
-
-Clarification exits when all conditions are true:
-
-- all critical ambiguities classified as resolved or assumed,
-- requirements engineer confidence score >= threshold,
-- no unresolved ambiguity blocks planning,
-- maximum clarification cycles not exceeded.
-
-## 11.4 Retry semantics
-All yes/no prompts are replaced by internal control rules:
-
-- each correction loop max 3 retries,
-- after 3 failures, route to `FAILED` or `ESCALATION_REQUIRED`,
-- all retries logged with cause and delta.
+- `timestamp`
+- `project_id`
+- `stage`
+- `protection_level = 2`
+- `retry_index`
+- `failing_tests[]`
+- `traceback_excerpt`
+- `affected_files[]`
+- `coverage_before`
+- `coverage_after`
+- `prompt_hashes.implementer`
+- `prompt_hashes.tester`
+- `token_counts`
+- `dollar_cost`
+- `result = pass|fail`
 
 ---
 
-## 12. LLM Interaction Contract
+### 1.3 Global retry rules
 
-A critical engineering gap in systems like this is prompt contract drift. The contract should be fixed.
+These are mandatory and supersede any local heuristics:
 
-## 12.1 General contract
-For any file-generating stage, the LLM must return exactly one fenced JSON block and no prose outside it.
+1. No stage may exceed **three retries**.
+2. A failed Level 1 attempt does **not** consume Level 2 budget.
+3. A failed Level 2 attempt does **not** reset Level 1 budget for the same cycle.
+4. Each retry must be logged as a separate append-only event.
+5. Retrying with the exact same prompt text is forbidden; each retry prompt must include incremental diagnostic information.
+6. Retrying may switch to a fallback model **only** if the workflow YAML explicitly allows it.
+7. If retries are exhausted, the project remains resumable from the failed batch.
 
-## 12.2 Scaffolding response contract
-Minimum fields:
+---
+
+## 2. Strict JSON Contracts
+
+The system should use **formal JSON Schema files** under `schemas/`, but the following contracts define exactly what must be enforced.
+
+---
+
+### 2.1 Scaffolding Output Schema
+
+File: `schemas/scaffolding.schema.json`
 
 ```json
 {
-  "project_name": "string",
-  "folders": ["path1", "path2"],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScaffoldingOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_name", "folders", "files"],
+  "properties": {
+    "project_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[A-Za-z0-9._ -]+$"
+    },
+    "folders": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "content", "intent", "test_instructions"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "test_instructions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+#### Additional non-schema checks
+These must be enforced in Python even if not expressed in JSON Schema:
+
+- every file path must be relative,
+- every file path must resolve under `projects/<project-id>/implementation/`,
+- no duplicate normalized paths,
+- every parent folder must either exist or be creatable under the same root,
+- path separators are normalized before validation.
+
+#### Minimal valid example
+
+```json
+{
+  "project_name": "sample_project",
+  "folders": [
+    "src",
+    "src/utils",
+    "tests"
+  ],
   "files": [
     {
-      "path": "relative/path.py",
-      "content": "full file content",
-      "intent": "why this file exists",
-      "test_instructions": ["instruction 1", "instruction 2"]
+      "path": "src/__init__.py",
+      "content": "",
+      "intent": "Mark src as a Python package.",
+      "test_instructions": [
+        "No direct unit test required.",
+        "Import package in test_smoke_imports.py."
+      ]
     }
   ]
 }
 ```
 
-## 12.3 Code writing response contract
-Minimum fields:
+---
+
+### 2.2 Code-Writing Output Schema
+
+File: `schemas/code_writing.schema.json`
 
 ```json
 {
-  "task_batch_id": "string",
-  "files": [
-    {
-      "path": "relative/path.py",
-      "content": "full file content",
-      "intent": "purpose",
-      "test_instructions": ["tests to create"]
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CodeWritingOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batch_id", "task_ids", "files", "self_healing_note"],
+  "properties": {
+    "batch_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "content", "intent", "test_instructions"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "content": { "type": "string" },
+          "intent": { "type": "string", "minLength": 1 },
+          "test_instructions": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "self_healing_note": {
+      "type": "string",
+      "minLength": 1
     }
-  ],
-  "self_healing_note": "what try-except protection was added and why"
+  }
 }
 ```
 
-## 12.4 Validation rules
-The `json_writer` must reject outputs that:
-
-- are missing the fenced JSON block,
-- contain invalid JSON,
-- violate schema,
-- attempt path traversal,
-- include duplicate paths with conflicting content,
-- omit mandatory fields,
-- exceed configured file limits.
+#### Semantic constraints
+- `task_ids` must match tasks currently active in the batch.
+- Files outside the project implementation root are rejected.
+- When editing an existing file, the full replacement content must be emitted; partial patch language is not allowed in MVP.
+- `self_healing_note` must explain the defensive logic inserted (try/except, fallback paths, validation).
 
 ---
 
-## 13. Logging and Cost Tracking
+### 2.3 Test-Generation Output Schema
 
-The execution log is not a side utility. It is part of the core control plane.
+File: `schemas/test_generation.schema.json`
 
-## 13.1 Log location
-`projects/<project-id>/logs/execution_log.json`
-
-## 13.2 Log policy
-- append-only,
-- never rewritten in-place except safe append operation,
-- log creation at project start,
-- each event logged as a structured record.
-
-## 13.3 Events that must be logged
-- state transitions,
-- LLM calls,
-- token counts,
-- cost estimates,
-- file writes,
-- schema validation failures,
-- retry invocations,
-- pytest executions,
-- review decisions,
-- documentation report creation,
-- pricing report generation,
-- self-evolution proposals.
-
-## 13.4 computePricing command
-Command:
-
-```bash
-python main.py computePricing <project-id> [--csv]
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TestGenerationOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batch_id", "test_files"],
+  "properties": {
+    "batch_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "test_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "content", "covers"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "content": { "type": "string" },
+          "covers": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}
 ```
 
-Expected outputs:
-
-- per interaction pricing,
-- grouped totals by stage,
-- grouped totals by workflow,
-- grouped totals by agent,
-- grand total,
-- optional CSV export.
-
-## 13.5 Token/cost engine requirements
-Use local tokenization only:
-
-- `tiktoken` for token counting,
-- `tokencost` for pricing map or pricing calculation support.
-
-The engine must support model-aware pricing tables and versioned pricing metadata so historical logs remain interpretable even after pricing changes.
-
 ---
 
-## 14. Testing Strategy
-
-The prompt asks for tests but does not define the quality bar deeply enough. This plan does.
-
-## 14.1 Test categories
-### Unit tests
-Validate individual modules and classes.
-
-### Integration tests
-Validate interactions across state machine, workflow loader, JSON writer, scaffolder, and log writer.
-
-### Regression tests
-Lock in fixes after failures.
-
-### End-to-end tests
-Simulate a small project creation and one execution batch.
-
-## 14.2 Mandatory Phase 2 test files
-At minimum:
-
-- `test_state_machine.py`
-- `test_scaffolder.py`
-- `test_json_writer.py`
-- `test_protection_agent.py`
-- `test_pricing_engine.py`
-
-## 14.3 Additional recommended tests
-- `test_workflow_loader.py`
-- `test_retry_policy.py`
-- `test_log_writer.py`
-- `test_compute_pricing_command.py`
-- `test_schema_validator.py`
-- `test_path_safety.py`
-
-## 14.4 Coverage target
-- `>= 80%` on all new code
-- no critical module under `70%`
-- branch coverage enabled where practical for protection loops
-
-## 14.5 Test execution policy
-Pytest must run:
-
-- after each generated batch,
-- after each level 2 correction,
-- after self-build phase,
-- after self-evolution sandbox proposal.
-
----
-
-## 15. Protection and Self-Healing Design
-
-This system will fail often during development unless recovery is precise. The prompt names two levels; this plan defines them.
-
-## 15.1 Level 1: format/protocol failures
-Triggers:
-
-- malformed JSON,
-- missing required fields,
-- invalid fence extraction,
-- workflow output violating schema.
-
-Response:
-
-- build corrective prompt,
-- preserve original intent and content request,
-- request structure-only correction,
-- retry same task up to 3 times,
-- log each retry as level 1.
-
-## 15.2 Level 2: runtime/test failures
-Triggers:
-
-- pytest failures,
-- import errors,
-- syntax/runtime exceptions,
-- deterministic acceptance failure.
-
-Response:
-
-- attach failing tests and error trace,
-- notify Implementer and Tester workflows,
-- regenerate implementation and/or tests,
-- require permanent regression test,
-- retry up to 3 times,
-- log each retry as level 2.
-
-## 15.3 Failure exhaustion policy
-After 3 retries:
-
-- mark task batch as failed,
-- write failure summary,
-- stop autonomous progression for that project unless failure policy explicitly allows skip,
-- do not silently continue.
-
----
-
-## 16. Detailed Phase-by-Phase Planning
-
-# Phase 0 — Preparatory Architecture Decisions
-
-This phase is not named in the prompt but is necessary before Phase 2 can be executed safely.
-
-## Objectives
-- freeze architecture conventions,
-- define schemas,
-- define repository layout,
-- define coding standards,
-- define log contract.
-
-## Deliverables
-- architecture decision record,
-- JSON schemas,
-- workflow schema,
-- log schema,
-- coding standard doc.
-
-## Acceptance criteria
-- all later phases can implement against stable contracts.
-
----
-
-# Phase 1 — Requirements Consolidation and Plan Freeze
-
-This is conceptually upstream of the build phases.
-
-## Objectives
-- turn the project prompt into implementation requirements for the Genesis engine itself,
-- identify missing assumptions,
-- define MVP boundaries,
-- approve architecture baseline.
-
-## Key outputs
-- Genesis engine requirements document,
-- domain decomposition,
-- gap analysis,
-- implementation roadmap.
-
-## Risks addressed
-- overbuilding too early,
-- mixing long-term product with short-term core engine,
-- unclear success criteria.
-
----
-
-# Phase 2 — Core Infrastructure (3 to 4 days)
-
-This must be built first.
-
-## 16.2.1 Objectives
-- install foundational dependencies,
-- create core tools,
-- create test harness,
-- make workflows loadable,
-- make state machine capable of deterministic execution,
-- add cost tracking and pricing report generation.
-
-## 16.2.2 Work packages
-
-### WP2.1 Dependency update
-Update `requirements.txt` with:
-
-- `pytest>=8`
-- `tiktoken`
-- `tokencost`
-
-Recommended additions for robustness:
-
-- `pyyaml`
-- `jsonschema`
-- `pytest-cov`
-- `pydantic` or equivalent schema helper, if compatible with repo style
-
-### WP2.2 Test infrastructure
-Create root `tests/` and organize into:
-
-- `tests/unit`
-- `tests/integration`
-- `tests/regression`
-- `tests/fixtures`
-
-### WP2.3 Implement tools/scaffolder.py
-Required behavior:
-
-- accepts `project_id` and validated scaffolding dictionary,
-- creates `projects/<project-id>/implementation/` tree,
-- creates nested folders first,
-- writes files exactly as specified,
-- refuses unsafe paths,
-- returns materialization report.
-
-### WP2.4 Implement tools/json_writer.py
-Required behavior:
-
-- extracts fenced JSON block,
-- validates schema,
-- validates safe paths,
-- writes via scaffolder or file writer,
-- appends execution record.
-
-### WP2.5 Implement tools/protection_agent.py
-Required behavior:
-
-- expose `handle_level_1(...)`
-- expose `handle_level_2(...)`
-- build corrective prompts,
-- enforce 3-retry max,
-- emit retry logs and summaries.
-
-### WP2.6 Implement tools/pricing_engine.py
-Required behavior:
-
-- token count prompt and response locally,
-- map model to price,
-- compute exact estimated USD cost,
-- return per-message and total cost object,
-- support command reuse for computePricing.
-
-### WP2.7 Populate workflows folder
-Create exactly five YAML files.
-
-Each must include:
-
-- full prompt template,
-- model,
-- max tokens,
-- success criteria,
-- test procedure,
-- interconnect rules.
-
-### WP2.8 Update core/state_machine.py
-Required changes:
-
-- auto-load workflows,
-- register stages,
-- add states:
-  - scaffolding,
-  - code writing,
-  - testing,
-  - review batch,
-  - protection level 1,
-  - protection level 2,
-- replace yes/no prompts with internal retry logic.
-
-### WP2.9 Update main.py
-Required changes:
-
-- add `--autonomous` flag default true,
-- add `computePricing` command,
-- create fresh append-only execution log at project start.
-
-### WP2.10 Run and pass tests
-Required:
-
-- run all new unit tests,
-- confirm passing state,
-- confirm coverage >=80% on new code.
-
-## 16.2.3 Test procedures
-For each module:
-
-- nominal case
-- invalid input case
-- boundary case
-- append-only logging verification
-- retry exhaustion verification
-- pricing calculation correctness
-
-## 16.2.4 Acceptance criteria
-Phase 2 is complete only if:
-
-- mandatory workflows load automatically,
-- execution log is created for new project,
-- pricing engine returns deterministic output,
-- protection loops work with capped retries,
-- scaffolder and JSON writer pass tests,
-- `computePricing` outputs full priced report,
-- coverage target reached.
-
----
-
-# Phase 3 — Stage 1 Project Scaffolding (2 days)
-
-## 16.3.1 Objectives
-- make the first real project generation stage operational,
-- convert requirements/planning outputs into an implementation folder automatically.
-
-## 16.3.2 Work packages
-
-### WP3.1 Requirements analysis execution
-Requirements Engineer:
-
-- analyze prompt,
-- identify domains/subdomains,
-- select appropriate agent set,
-- define scaffolding intent.
-
-### WP3.2 Strict JSON scaffolding prompt
-Build prompt templates with:
-
-- system message forcing JSON only,
-- examples of valid/invalid outputs,
-- schema reminders,
-- no prose rule.
-
-### WP3.3 JSON validation and scaffolding materialization
-Flow:
-
-1. LLM returns scaffolding JSON.
-2. `json_writer` extracts and validates.
-3. `scaffolder` creates folders/files.
-4. log entry appended.
-5. Documenter records scaffold purpose.
-
-### WP3.4 Level 1 protection integration
-If malformed:
-
-- trigger level 1,
-- attempt structure-only repair up to 3 times,
-- fail visibly if exhausted.
-
-### WP3.5 Completion signaling
-State machine marks `SCAFFOLDING_COMPLETE` and routes forward.
-
-## 16.3.3 Acceptance criteria
-- strict JSON-only scaffolding accepted,
-- folder tree created correctly,
-- every file has intent and test instructions,
-- exact cost logged,
-- malformed JSON triggers level 1 immediately.
-
----
-
-# Phase 4 — Stage 2 Code Writing + Self-Healing + Testing + Review (5 to 7 days)
-
-This is the core execution engine.
-
-## 16.4.1 Objectives
-- implement batch-based execution,
-- automatically generate tests,
-- recover from structural and runtime failures,
-- ensure review closes requirement gaps.
-
-## 16.4.2 Work packages
-
-### WP4.1 Batch planner
-Planner must output batches of 5 to 10 tasks.
-
-Each task must include:
-
-- requirement trace ID,
-- title,
-- description,
-- dependencies,
-- files expected,
-- tests expected,
-- skills required,
-- acceptance criteria.
-
-### WP4.2 Implementer JSON output
-Implementer must produce JSON only with:
-
-- files,
-- content,
-- intent,
-- test instructions,
-- self-healing note.
-
-### WP4.3 File materialization
-`json_writer` writes to `implementation/`.
-
-### WP4.4 Tester generation
-Tester reads file intents and creates pytest tests in project tests folder.
-
-### WP4.5 Automatic pytest execution
-Pytest runs after each batch. Results are captured in execution log.
-
-### WP4.6 Level 2 protection loop
-On test failure:
-
-- pass failing tests and traces back to Implementer and Tester,
-- regenerate only affected outputs,
-- add permanent regression tests,
-- repeat until green or retry limit reached.
-
-### WP4.7 Reviewer gap analysis
-Reviewer maps completed outputs back to original requirements.
-
-If any requirement is incompletely covered:
-
-- add missing tasks back to Planner,
-- do not advance as complete.
-
-### WP4.8 Documentation generation
-Per task, Documenter produces:
-
-- purpose,
-- files changed,
-- method,
-- tests executed,
-- result,
-- possible commit summary.
-
-## 16.4.3 Batch execution cycle
-Canonical cycle:
-
-1. select batch
-2. build code-writing prompt
-3. get JSON output
-4. validate/write files
-5. generate tests
-6. run pytest
-7. protect and heal if needed
-8. review for completeness
-9. document
-10. advance to next batch
-
-## 16.4.4 Acceptance criteria
-Phase 4 is complete when:
-
-- all planned tasks are executed,
-- all tests pass,
-- all failures are either fixed or explicitly failed after retry exhaustion,
-- reviewer signs off coverage,
-- documentation exists for every batch and task,
-- execution log contains complete trace.
-
----
-
-# Phase 5 — First Self-Build + Polish (3 days)
-
-This phase validates the central thesis: version 1 can safely improve itself.
-
-## 16.5.1 Objectives
-- use the system to modify its own codebase,
-- validate the pricing engine against the self-build itself,
-- improve UX visibility for spend reporting.
-
-## 16.5.2 Mandatory scenario
-Feed this task through the full pipeline:
-
-- “Add the computePricing command to main.py”
-
-Even if already present from earlier implementation, treat this as a formal self-build validation scenario by either:
-
-- implementing missing pieces, or
-- reconstructing the feature through the pipeline in sandbox and verifying identical result.
-
-## 16.5.3 Work packages
-
-### WP5.1 Self-build project instance
-Create internal project instance for the self-build.
-
-### WP5.2 Full stage 1 + stage 2 execution
-Run the exact scaffolding/code/testing/review workflow on the system’s own repo or sandbox fork.
-
-### WP5.3 Full repo test run
-Run complete pytest suite with coverage.
-
-### WP5.4 Status command enhancement
-Update `status` command to show:
-
-- live spend so far,
-- estimated remaining cost.
-
-### WP5.5 Project report generation
-Documenter generates end-to-end project report.
-
-### WP5.6 Pricing verification
-Use `computePricing` to verify the self-build cost report includes the self-build interactions.
-
-## 16.5.4 Acceptance criteria
-- self-build runs through the same pipeline used for clients,
-- repo passes full test suite,
-- coverage >=80% on target code,
-- pricing report includes self-build costs accurately,
-- status command surfaces spend data.
-
----
-
-# Phase 6 — Self-Evolution Engine
-
-## 16.6.1 Objectives
-- move from one-shot self-build to controlled recurring self-improvement.
-
-## 16.6.2 Work packages
-
-### WP6.1 Execution-log-driven analysis
-Self-Evolution Agent reads logs and identifies recurring inefficiencies, failure clusters, and high-cost hotspots.
-
-### WP6.2 Dependency graph construction
-Use static analysis to build dependency graph.
-
-Targets:
-
-- imports,
-- workflow dependencies,
-- agent-to-tool dependencies,
-- critical core files.
-
-### WP6.3 Improvement proposal generation
-Agent proposes changes in the same JSON output format as normal implementation.
-
-### WP6.4 Sandbox validation
-All proposals execute in sandbox project first.
-
-### WP6.5 Core-file approval rule
-Human approval required only when proposal touches core files such as:
-
-- `main.py`
-- `core/state_machine.py`
-- security-critical config
-- pricing logic affecting billing accuracy
-
-### WP6.6 Safe apply
-Only after green tests and review sign-off can proposal apply to mainline.
-
-## 16.6.3 Acceptance criteria
-- self-evolution never bypasses standard pipeline,
-- sandbox verification is mandatory,
-- dependency graph reviewed before any core mutation.
-
----
-
-# Phase 7 — Desktop Productization
-
-## 16.7.1 Objectives
-- wrap the CLI engine in a distributable desktop app,
-- maintain exact orchestration semantics.
-
-## 16.7.2 Technology choice
-Preferred order:
-
-1. **Tauri** for lighter footprint and better native distribution,
-2. **Electron** if team expertise or plugin ecosystem justifies it.
-
-## 16.7.3 Desktop feature scope
-- project creation UI,
-- API key configuration per model provider,
-- live workflow visualization,
-- spend dashboard,
-- execution log viewer,
-- one-click self-rebuild button,
-- marketplace browsing surface.
-
-## 16.7.4 Acceptance criteria
-- desktop app uses same backend orchestration,
-- no second orchestration logic duplicated in UI layer.
-
----
-
-# Phase 8 — Monetization Layer
-
-This should not block the core engine, but the architecture must not preclude it.
-
-## 16.8.1 Objectives
-- introduce revenue primitives without disturbing core execution safety.
-
-## 16.8.2 Features
-- freemium desktop tier,
-- credit system,
-- 20% platform cut,
-- agent-pack marketplace,
-- white-label generator,
-- analytics dashboard.
-
-## 16.8.3 Architectural requirement
-Billing, credits, and marketplace logic must be layered above orchestration, not mixed into core execution control.
-
-## 16.8.4 Acceptance criteria
-- spend tracking from execution logs can feed billing,
-- provider-agnostic orchestration remains intact.
-
----
-
-## 17. Planner Output Specification
-
-The Planner is central and must produce more than a generic task list.
-
-## 17.1 Required plan sections
-The Planner’s output should include:
-
-1. requirement trace matrix
-2. task decomposition
-3. task dependency graph
-4. test plan by task
-5. skill matrix by phase
-6. agent reuse analysis
-7. resource and model selection rationale
-8. batch schedule
-9. risk register
-10. acceptance gate per phase
-
-## 17.2 Skill planning requirement
-The prompt states “often 12 or more skills per phase.”
-
-Representative skills to track:
-
-- Python architecture
-- JSON schema design
-- YAML workflow design
-- CLI engineering
-- state machine design
-- prompt engineering
-- LLM output validation
-- pytest authoring
-- regression testing
-- logging and observability
-- token accounting
-- pricing/billing logic
-- file system safety
-- sandboxing
-- dependency analysis
-- desktop packaging
-- security review
-- technical documentation
-
----
-
-## 18. Requirements Traceability Matrix
-
-A traceability system is mandatory for coverage claims.
-
-## 18.1 Matrix structure
-Each requirement must map to:
-
-- planner task IDs,
-- implementation files,
-- test files,
-- review evidence,
-- documentation report IDs.
-
-## 18.2 Example columns
-- `requirement_id`
-- `requirement_text`
-- `phase`
-- `task_ids`
-- `file_paths`
-- `test_paths`
-- `review_status`
-- `doc_ids`
-
-## 18.3 Completion rule
-A requirement is complete only if:
-
-- implementation exists,
-- tests pass,
-- reviewer approves,
-- documentation exists.
-
----
-
-## 19. Data Contracts and Schemas
-
-The project will become fragile without early schema formalization.
-
-## 19.1 Mandatory schemas
-- scaffolding output schema
-- code-writing output schema
-- workflow YAML schema
-- execution log entry schema
-- documentation report schema
-- pricing report schema
-- agent definition schema
-- plan task schema
-
-## 19.2 Validation layer
-Use schema validation at all important boundaries:
-
-- LLM output -> JSON writer
-- workflow YAML -> workflow loader
-- execution log append -> log writer
-- pricing report generation -> exporter
-
----
-
-## 20. CLI Design
-
-The original vision is CLI-centered. The CLI should be explicit and composable.
-
-## 20.1 Recommended commands
-```bash
-python main.py createProject "<client prompt>" [--project-id X] [--autonomous true]
-python main.py status <project-id>
-python main.py computePricing <project-id> [--csv]
-python main.py runStage <project-id> <stage>
-python main.py runAll <project-id>
-python main.py showLog <project-id>
-python main.py reviewPlan <project-id>
-python main.py sandboxEvolve <project-id>
+### 2.4 Documentation Report Schema
+
+File: `schemas/documentation_report.schema.json`
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DocumentationReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project_id",
+    "batch_id",
+    "task_ids",
+    "summary",
+    "files_changed",
+    "tests_run",
+    "result",
+    "usage_reason"
+  ],
+  "properties": {
+    "project_id": { "type": "string", "minLength": 1 },
+    "batch_id": { "type": "string", "minLength": 1 },
+    "task_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "summary": { "type": "string", "minLength": 1 },
+    "files_changed": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "tests_run": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "result": {
+      "type": "string",
+      "enum": ["success", "partial", "failure"]
+    },
+    "usage_reason": { "type": "string", "minLength": 1 }
+  }
+}
 ```
 
-## 20.2 CLI rules
-- deterministic outputs,
-- machine-readable option where relevant,
-- no unnecessary interactive confirmation after initial approval.
+---
+
+### 2.5 Execution Log Entry Schema
+
+File: `schemas/execution_log.schema.json`
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExecutionLogEntry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "timestamp",
+    "project_id",
+    "agent_name",
+    "stage",
+    "event_type",
+    "retry_count",
+    "prompt",
+    "response",
+    "tokens",
+    "dollars"
+  ],
+  "properties": {
+    "timestamp": { "type": "string", "format": "date-time" },
+    "project_id": { "type": "string", "minLength": 1 },
+    "agent_name": { "type": "string", "minLength": 1 },
+    "stage": { "type": "string", "minLength": 1 },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "llm_call",
+        "validation",
+        "file_write",
+        "test_run",
+        "retry",
+        "review",
+        "documentation",
+        "failure"
+      ]
+    },
+    "retry_count": { "type": "integer", "minimum": 0 },
+    "prompt": { "type": "string" },
+    "response": { "type": "string" },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt", "response", "total"],
+      "properties": {
+        "prompt": { "type": "integer", "minimum": 0 },
+        "response": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "dollars": { "type": "number", "minimum": 0 }
+  }
+}
+```
+
+#### Append-only rule
+The execution log is append-only at application level:
+
+- existing entries may never be modified in place,
+- new events are appended as new objects,
+- corrections must be recorded as new events, not edits of earlier events.
 
 ---
 
-## 21. Documentation System Design
+## 3. Workflow YAML Contract
 
-The Documenter is not merely a markdown writer. It is a traceability subsystem.
+The original master plan required five YAML workflow files. This section defines the exact minimum schema they must follow.
 
-## 21.1 Documentation outputs
-For each small task:
+### 3.1 Required workflow fields
+Every workflow YAML must contain:
 
-- task report markdown,
-- commit summary suggestion,
-- artifact rationale record,
-- dependency/impact note if relevant.
+- `workflow_id`
+- `name`
+- `stage`
+- `agent_role`
+- `model`
+- `max_tokens`
+- `temperature`
+- `input_contract`
+- `output_schema`
+- `success_criteria`
+- `retry_policy`
+- `test_procedure`
+- `transitions`
 
-## 21.2 Storage recommendation
-Inside `projects/<project-id>/docs/`:
+### 3.2 Canonical example — `workflows/01_scaffolding.yaml`
+
+```yaml
+workflow_id: "01_scaffolding"
+name: "Project Scaffolding"
+stage: "scaffolding"
+agent_role: "requirements_engineer"
+model: "gpt-5.4-thinking"
+max_tokens: 12000
+temperature: 0.1
+input_contract:
+  required:
+    - project_id
+    - client_prompt
+    - clarified_requirements
+output_schema: "schemas/scaffolding.schema.json"
+success_criteria:
+  - "Exactly one fenced JSON block is returned."
+  - "JSON validates against scaffolding.schema.json."
+  - "All target paths remain under project implementation root."
+  - "Scaffolder creates all folders and files without collision."
+retry_policy:
+  protection_level_1:
+    max_retries: 3
+    fallback_model: "gpt-5.4-thinking"
+  protection_level_2:
+    max_retries: 0
+test_procedure:
+  - "Validate JSON envelope extraction."
+  - "Validate JSON schema."
+  - "Run path normalization and path traversal checks."
+  - "Create files in temp project root and assert existence."
+transitions:
+  on_success: "code_writing"
+  on_l1_exhausted: "failed_l1_exhausted"
+  on_error: "failed_l1_exhausted"
+```
+
+### 3.3 Canonical example — `workflows/02_code_writing.yaml`
+
+```yaml
+workflow_id: "02_code_writing"
+name: "Code Writing"
+stage: "code_writing"
+agent_role: "implementer"
+model: "gpt-5.4-thinking"
+max_tokens: 18000
+temperature: 0.15
+input_contract:
+  required:
+    - project_id
+    - batch_id
+    - tasks
+    - implementation_root
+output_schema: "schemas/code_writing.schema.json"
+success_criteria:
+  - "Output validates against code_writing.schema.json."
+  - "All files contain full replacement content."
+  - "self_healing_note is present and non-empty."
+retry_policy:
+  protection_level_1:
+    max_retries: 3
+    fallback_model: "gpt-5.4-thinking"
+  protection_level_2:
+    max_retries: 3
+    fallback_model: "gpt-5.4-thinking"
+test_procedure:
+  - "Validate envelope and schema."
+  - "Write files to temp implementation root."
+  - "Run pytest for batch-specific tests."
+  - "Enforce coverage threshold for new modules."
+transitions:
+  on_success: "testing"
+  on_l1_exhausted: "failed_l1_exhausted"
+  on_l2_exhausted: "failed_l2_exhausted"
+```
+
+---
+
+## 4. Missing Agents — Exact MVP Implementation Plan
+
+The critique was correct: some agents were named before being specified. The following turns those agents into implementable MVP classes.
+
+---
+
+### 4.1 BrainstormerAgent
+
+#### Purpose
+Expand the domain map produced by the Requirements Engineer and return:
+
+- completions,
+- adjacent domains,
+- risks,
+- missing assumptions,
+- clarification questions.
+
+#### Minimum class contract
+
+```python
+class BrainstormerAgent(BaseAgent):
+    def generate_completions(self, idea_packet: dict) -> dict:
+        ...
+```
+
+#### Required input
+
+```json
+{
+  "project_id": "proj_001",
+  "root_idea": "user prompt text",
+  "domains": ["control systems", "embedded software"],
+  "subdomains": ["state machines", "CLI orchestration"],
+  "constraints": ["local-first", "autonomous by default"]
+}
+```
+
+#### Required output
+
+```json
+{
+  "completions": ["..."],
+  "adjacent_domains": ["..."],
+  "risks": ["..."],
+  "assumptions": ["..."],
+  "clarification_questions": ["..."]
+}
+```
+
+#### Acceptance criteria
+- Output keys are always present.
+- Empty lists are allowed only for `clarification_questions` once completeness is reached.
+- No prose outside the JSON block.
+- At least one adjacent domain must be proposed when the input contains more than one root domain.
+
+#### Unit tests required
+- `test_brainstormer_returns_all_keys`
+- `test_brainstormer_handles_single_domain_input`
+- `test_brainstormer_questions_can_be_empty_only_after_clear_signal`
+- `test_brainstormer_json_is_schema_valid`
+
+---
+
+### 4.2 ReviewerAgent
+
+#### Purpose
+Perform post-batch gap analysis and answer one binary question:
+
+> Does this batch fully satisfy the linked requirements without hidden omissions?
+
+#### Minimum class contract
+
+```python
+class ReviewerAgent(BaseAgent):
+    def review_batch(self, requirement_slice: list, batch_artifacts: dict) -> dict:
+        ...
+```
+
+#### Required input
+
+```json
+{
+  "requirement_ids": ["REQ-12", "REQ-13"],
+  "requirements": [
+    {"id": "REQ-12", "text": "..."},
+    {"id": "REQ-13", "text": "..."}
+  ],
+  "changed_files": ["core/state_machine.py"],
+  "tests_passed": ["tests/unit/test_state_machine.py::test_loads_workflows"],
+  "coverage_summary": {
+    "new_modules": 0.86
+  }
+}
+```
+
+#### Required output
+
+```json
+{
+  "approved": true,
+  "covered_requirements": ["REQ-12", "REQ-13"],
+  "missing_requirements": [],
+  "review_notes": ["All specified transitions are implemented and tested."],
+  "follow_up_tasks": []
+}
+```
+
+#### Decision rule
+- `approved=true` only if `missing_requirements` is empty.
+- If any requirement is only partially met, it must appear in `missing_requirements`.
+- `follow_up_tasks` must be non-empty whenever `approved=false`.
+
+#### Unit tests required
+- `test_reviewer_approves_complete_batch`
+- `test_reviewer_rejects_partial_requirement_coverage`
+- `test_reviewer_emits_follow_up_tasks_when_rejected`
+- `test_reviewer_json_is_schema_valid`
+
+---
+
+### 4.3 Agent registration and reuse matcher
+
+The 75% reuse threshold must not remain conceptual. For MVP, implement it as weighted overlap.
+
+#### Reuse score formula
 
 ```text
-/docs/
-  /requirements/
-  /planning/
-  /batch_reports/
-  /task_reports/
-  /reviews/
-  /pricing/
+reuse_score =
+  0.40 * skill_overlap_ratio +
+  0.25 * workflow_overlap_ratio +
+  0.20 * role_similarity_ratio +
+  0.15 * tool_overlap_ratio
 ```
 
-## 21.3 Acceptance criteria
-- every batch documented,
-- every significant file change attributable,
-- reports usable for git history or release notes.
+Reuse rule:
+
+- if `reuse_score >= 0.75`: reuse existing agent;
+- else: create new stub agent with history file initialized.
+
+#### Minimum stub fields
+
+```json
+{
+  "agent_id": "agent_017",
+  "agent_name": "reviewer_v1",
+  "agent_role": "reviewer",
+  "skills": ["requirement coverage analysis", "gap detection"],
+  "history_path": "agents/history/reviewer_v1.json"
+}
+```
 
 ---
 
-## 22. Risk Register
+## 5. Copy-Paste-Ready Control Snippets
 
-## 22.1 Technical risks
-### Risk: prompt drift causes invalid JSON
-Mitigation:
-- schema-aware prompting,
-- few-shot valid/invalid examples,
-- level 1 retries.
-
-### Risk: tests become weak and self-confirming
-Mitigation:
-- reviewer inspects test adequacy,
-- regression test requirement,
-- intent-derived test generation with acceptance criteria anchors.
-
-### Risk: state machine complexity becomes unmanageable
-Mitigation:
-- explicit state enum,
-- transition table,
-- transition tests.
-
-### Risk: cost estimates become inaccurate over time
-Mitigation:
-- versioned model pricing metadata,
-- pricing snapshot stored in logs.
-
-### Risk: unsafe self-modification
-Mitigation:
-- sandbox first,
-- dependency graph check,
-- core-file approval.
-
-### Risk: runaway retry loops
-Mitigation:
-- max three retries,
-- hard fail after exhaustion.
-
-### Risk: agent sprawl
-Mitigation:
-- 75% reuse policy,
-- registry and scoring.
-
-## 22.2 Product risks
-### Risk: monetization pollutes core architecture too early
-Mitigation:
-- isolate commercial layer above orchestration.
-
-### Risk: desktop wrapper duplicates logic
-Mitigation:
-- keep CLI engine as single source of orchestration truth.
+These are not the full implementation, but they make the blueprint executable enough for coding.
 
 ---
 
-## 23. Security and Safety Considerations
+### 5.1 ProtectionAgent skeleton
 
-## 23.1 File safety
-- reject path traversal (`../`),
-- restrict writes to project implementation roots,
-- protect core repo paths unless explicitly allowed.
+```python
+from dataclasses import dataclass
+from typing import List, Dict, Any
 
-## 23.2 Log sensitivity
-Logs contain full prompts and responses. Therefore:
 
-- define local storage policy,
-- consider redaction strategy for secrets,
-- never store raw API keys in logs.
+@dataclass
+class ProtectionResult:
+    passed: bool
+    level: int
+    retry_index: int
+    errors: List[str]
+    corrected_response: str | None = None
 
-## 23.3 Execution safety
-- generated code should not auto-execute outside test harness,
-- sandbox self-evolution changes,
-- isolate destructive file operations.
 
-## 23.4 Provider abstraction safety
-- API keys stored securely,
-- provider choice separated from workflow logic.
+class ProtectionAgent:
+    MAX_L1_RETRIES = 3
+    MAX_L2_RETRIES = 3
 
----
+    def handle_level_1(
+        self,
+        *,
+        original_prompt: str,
+        response_text: str,
+        validation_errors: List[str],
+        llm_callable,
+        retry_index: int,
+    ) -> ProtectionResult:
+        if retry_index >= self.MAX_L1_RETRIES:
+            return ProtectionResult(False, 1, retry_index, validation_errors)
 
-## 24. Recommended Implementation Order Inside Each Phase
+        corrective_prompt = self._build_l1_prompt(
+            original_prompt=original_prompt,
+            response_text=response_text,
+            validation_errors=validation_errors,
+            retry_index=retry_index,
+        )
+        corrected = llm_callable(corrective_prompt)
+        return ProtectionResult(False, 1, retry_index + 1, validation_errors, corrected)
 
-This ordering reduces rework.
+    def handle_level_2(
+        self,
+        *,
+        task_bundle: Dict[str, Any],
+        failing_tests: List[str],
+        traceback_text: str,
+        llm_implementer,
+        llm_tester,
+        retry_index: int,
+    ) -> Dict[str, Any]:
+        if retry_index >= self.MAX_L2_RETRIES:
+            return {"passed": False, "level": 2, "retry_index": retry_index}
 
-## 24.1 Build order for Phase 2
-1. schemas
-2. log writer
-3. pricing engine
-4. scaffolder
-5. JSON writer
-6. workflow schema + loader
-7. state machine updates
-8. main.py CLI updates
-9. tests
-10. coverage gate
+        implementer_prompt = self._build_l2_implementer_prompt(
+            task_bundle, failing_tests, traceback_text, retry_index
+        )
+        tester_prompt = self._build_l2_tester_prompt(
+            task_bundle, failing_tests, traceback_text, retry_index
+        )
 
-## 24.2 Build order for Phase 4
-1. planner batch format
-2. implementer JSON prompt contract
-3. tester generation
-4. pytest runner integration
-5. protection level 2 loop
-6. reviewer coverage check
-7. documenter outputs
-
-## 24.3 Build order for self-evolution
-1. dependency graph
-2. sandbox orchestration
-3. proposal generation
-4. core-file approval handling
-5. apply pipeline
-
----
-
-## 25. Definition of Done
-
-A phase is done only if all are true:
-
-- implementation completed,
-- automated tests passing,
-- coverage target met,
-- reviewer approves requirement coverage,
-- documentation written,
-- execution log complete,
-- pricing data recoverable.
-
-A project is done only if all requirements in the traceability matrix are closed.
-
----
-
-## 26. Gaps Resolved by This Planning Document
-
-The original prompt had strong vision but left several engineering ambiguities. This plan resolves them by explicitly defining:
-
-- repository structure,
-- domain entities,
-- agent contracts,
-- reuse scoring method,
-- workflow schema,
-- state machine states and transitions,
-- JSON contracts,
-- execution log schema,
-- testing taxonomy,
-- failure exhaustion rules,
-- CLI command set,
-- documentation storage strategy,
-- self-evolution gating,
-- security boundaries,
-- implementation ordering.
-
-These are necessary to turn the prompt into an executable build program instead of a conceptual manifesto.
+        code_json = llm_implementer(implementer_prompt)
+        test_json = llm_tester(tester_prompt)
+        return {
+            "passed": False,
+            "level": 2,
+            "retry_index": retry_index + 1,
+            "code_json": code_json,
+            "test_json": test_json,
+        }
+```
 
 ---
 
-## 27. Immediate Next Actions
+### 5.2 JSON extraction and validation skeleton
 
-If this plan is used as the execution baseline, the next concrete steps should be:
+```python
+import json
+import re
+from pathlib import Path
+from jsonschema import validate
 
-1. freeze the repository structure,
-2. define schemas under `schemas/`,
-3. implement Phase 2 foundational modules,
-4. create all mandatory tests,
-5. validate workflow loader and state transitions,
-6. run first end-to-end scaffolding scenario,
-7. begin Stage 2 batch execution framework,
-8. validate with Phase 5 self-build scenario.
+
+JSON_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
+
+
+def extract_single_json_block(text: str) -> dict:
+    matches = JSON_BLOCK_RE.findall(text)
+    if len(matches) != 1:
+        raise ValueError(f"Expected exactly one fenced JSON block, found {len(matches)}")
+    return json.loads(matches[0])
+
+
+def assert_safe_relative_path(path_str: str, root: Path) -> Path:
+    path = (root / path_str).resolve()
+    if not str(path).startswith(str(root.resolve())):
+        raise ValueError(f"Unsafe path detected: {path_str}")
+    return path
+
+
+def validate_payload(payload: dict, schema: dict) -> None:
+    validate(instance=payload, schema=schema)
+```
 
 ---
 
-## 28. Final Assessment
+### 5.3 `computePricing` report skeleton
 
-PROJECT GENESIS is feasible, but only if treated as a constrained orchestration engine rather than a vague autonomous coding system. The prompt already contains the right strategic concepts:
+```python
+import csv
+import json
+from pathlib import Path
 
-- requirements-first execution,
-- planner-reviewed implementation,
-- deterministic workflows,
-- bounded self-healing,
-- exhaustive logging,
-- eventual self-evolution.
 
-The highest-risk areas are not model capability, but orchestration correctness, schema discipline, coverage integrity, and self-modification safety. This plan addresses those directly.
+def compute_pricing(log_path: Path, csv_path: Path | None = None) -> dict:
+    entries = json.loads(log_path.read_text(encoding="utf-8"))
 
-A sensible delivery strategy is:
+    total = 0.0
+    by_stage = {}
+    rows = []
 
-- first build a strict local CLI engine,
-- then validate it on self-build use cases,
-- then wrap it in desktop UX,
-- only then add monetization and full self-evolution.
+    for entry in entries:
+        dollars = float(entry["dollars"])
+        stage = entry["stage"]
+        total += dollars
+        by_stage[stage] = by_stage.get(stage, 0.0) + dollars
+        rows.append([
+            entry["timestamp"],
+            stage,
+            entry["agent_name"],
+            entry["tokens"]["prompt"],
+            entry["tokens"]["response"],
+            dollars,
+        ])
 
-That path preserves engineering discipline while staying aligned with the original living-organism vision.
+    if csv_path is not None:
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["timestamp", "stage", "agent", "prompt_tokens", "response_tokens", "dollars"])
+            writer.writerows(rows)
+
+    return {
+        "grand_total": round(total, 6),
+        "stage_totals": {k: round(v, 6) for k, v in by_stage.items()},
+        "entry_count": len(entries),
+    }
+```
+
+---
+
+## 6. Test Matrix for the Corrected Areas
+
+These tests should be added immediately because they directly close the criticism.
+
+### 6.1 Protection tests
+- `test_l1_retries_stop_after_three_failures`
+- `test_l1_does_not_write_files_before_schema_pass`
+- `test_l2_retries_stop_after_three_failed_test_cycles`
+- `test_l2_requires_regression_test_on_retry`
+- `test_l1_and_l2_budgets_are_independent`
+
+### 6.2 Schema tests
+- `test_scaffolding_schema_rejects_unknown_top_level_keys`
+- `test_scaffolding_schema_rejects_missing_test_instructions`
+- `test_code_writing_schema_requires_self_healing_note`
+- `test_json_writer_rejects_duplicate_paths`
+- `test_json_writer_rejects_path_traversal`
+
+### 6.3 Workflow tests
+- `test_workflow_loader_requires_all_mandatory_fields`
+- `test_workflow_loader_rejects_invalid_retry_policy`
+- `test_scaffolding_yaml_points_to_existing_schema`
+
+### 6.4 Agent tests
+- `test_brainstormer_contract`
+- `test_reviewer_contract`
+- `test_reuse_matcher_reuses_agent_at_or_above_threshold`
+- `test_reuse_matcher_creates_stub_below_threshold`
+
+---
+
+## 7. Immediate Implementation Order
+
+To keep this correction pack practical, the next coding order should be exactly this:
+
+1. create JSON Schema files under `schemas/`;
+2. implement `json_writer.py` with extraction, schema validation, duplicate-path checks, and safe-path checks;
+3. implement `protection_agent.py` with exact retry counters for Level 1 and Level 2;
+4. implement `workflow_loader.py` validation for mandatory YAML keys;
+5. implement `BrainstormerAgent` and `ReviewerAgent` MVP stubs plus tests;
+6. add `computePricing` command and CSV export;
+7. add protection, schema, workflow, and agent tests;
+8. enforce 80% coverage gate on all newly added modules.
+
+This order matters because it establishes the guardrails before the broader autonomy loops rely on them.
+
+---
+
+## 8. Definition of Done for This Correction Pack
+
+The weaknesses identified by review are considered closed only when all of the following are true:
+
+1. Level 1 and Level 2 retry logic are implemented exactly as specified above.
+2. The scaffolding, code-writing, test-generation, documentation, and execution-log schemas exist as concrete files.
+3. Workflow YAML files conform to the mandatory contract and at least the two canonical examples exist.
+4. BrainstormerAgent and ReviewerAgent exist as concrete MVP classes with tests.
+5. The codebase includes at least the provided skeleton-level implementations for protection, JSON handling, and pricing.
+6. All new tests pass and coverage on new modules is at or above 80%.
+
+Once these are true, the earlier criticism is no longer valid: the plan is no longer merely architectural, but operational enough to drive implementation directly.
