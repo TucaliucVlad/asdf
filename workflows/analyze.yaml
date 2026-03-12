@@ -1,0 +1,7 @@
+name: "Initial Domain Analysis"
+state: "ANALYZE"
+model: "groq/grok-beta"          # or grok-4.1-fast when available
+max_output_tokens: 4000
+expected_output_tokens_avg: 1200
+budget_threshold_usd: 0.05       # warn above this
+description: "Extract domains, subdomains, suggested agents, clarifying questions"
