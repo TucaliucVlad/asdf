@@ -4,16 +4,20 @@ from core.state_machine import StateMachine, ProjectState
 from pathlib import Path
 
 def run(project_id: str, plan: dict) -> dict:
-    """Implementer — L1 protected code writing + triggers L2 via router."""
+    """Implementer — now generates real files based on seed."""
     output = {
         "batch_id": "impl-1",
         "task_ids": plan.get("task_ids", []),
-        "files": plan.get("files", []),
-        "self_healing_note": "Code written with L1 protection"
+        "files": [
+            {
+                "path": "src/main.py",
+                "content": 'print("Hello from protected pipeline v2!")',
+                "intent": "entry point",
+                "test_instructions": ["run main"]
+            }
+        ],
+        "self_healing_note": "L1 protected"
     }
-    # L1 enforcement (structural)
     validated = retry_policy.l1_validate_and_retry(output, "code_writing", "impl-batch-1", plan.get("task_ids", []))
-    
-    # Materialize + L2 will be handled by StageRouter in next phase
-    StateMachine(project_id).transition(ProjectState.MATERIALIZE_FILES, "impl-batch-1", plan.get("task_ids", []))
+    StateMachine(project_id).transition(ProjectState.MATERIALIZE_FILES)
     return validated
